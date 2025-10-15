@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import requests # NEW: Import requests for direct API call
 from github import Github
 from time import sleep
 
@@ -44,8 +46,6 @@ def main():
     
     # 4. Read and Modify HTML Content
     base_html_content = read_file(SOURCE_HTML_FILE)
-
-    # Replace the body content (city name)
     new_content = base_html_content.replace(SEARCH_TERM, city)
     
     # Replace the title tag
@@ -54,121 +54,92 @@ def main():
     
     # 5. Connect to GitHub and Create/Get Repo
     try:
-        # Suppress the DeprecationWarning for cleaner output
+        # Use the standard method to connect to PyGithub
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             g = Github(token)
         user = g.get_user()
         
-        # Check if repo exists
+        # Get or Create Repository
+        repo = None
+        repo_exists = False
         try:
             repo = user.get_repo(new_repo_name)
+            repo_exists = True
             print(f"Repository {new_repo_name} already exists. Proceeding to update.")
-            
-            # Ensure main branch exists before committing
-            try:
-                repo.get_branch("main")
-            except Exception:
-                initial_sha = repo.get_commits()[0].sha
-                repo.create_git_ref(ref='refs/heads/main', sha=initial_sha)
-                print("Created 'main' branch reference.")
-            
         except Exception:
-            # Create the repository if it doesn't exist
             print(f"Repository {new_repo_name} does not exist. Creating new repository.")
-            
             repo = user.create_repo(
                 name=new_repo_name,
                 description=f"GitHub Pages site for {city} Software Guild",
                 private=False,
-                has_issues=False,
-                has_projects=False,
-                has_wiki=False,
                 auto_init=True
             )
-            print(f"Successfully created new repository: {new_repo_name}")
             sleep(5) 
-            
-        # 6. Commit 'index.html' and '.nojekyll' to the new repo's main branch
 
+        # 6. Commit 'index.html' and '.nojekyll'
+        
         # Add/Update the .nojekyll file
         try:
             contents = repo.get_contents(".nojekyll", ref="main")
-            repo.update_file(
-                path=".nojekyll",
-                message="Update .nojekyll file",
-                content="",
-                sha=contents.sha,
-                branch="main"
-            )
+            repo.update_file(path=".nojekyll", message="Update .nojekyll file", content="", sha=contents.sha, branch="main")
         except Exception:
-            repo.create_file(
-                path=".nojekyll",
-                message="Add .nojekyll to enable direct HTML serving",
-                content="",
-                branch="main"
-            )
+            repo.create_file(path=".nojekyll", message="Add .nojekyll to enable direct HTML serving", content="", branch="main")
         print("Added/Updated .nojekyll file.")
 
         # Commit the generated index.html
         try:
             contents = repo.get_contents("index.html", ref="main")
-            repo.update_file(
-                path="index.html",
-                message=f"Update site content for {city}",
-                content=new_content,
-                sha=contents.sha,
-                branch="main"
-            )
+            repo.update_file(path="index.html", message=f"Update site content for {city}", content=new_content, sha=contents.sha, branch="main")
         except Exception:
-            repo.create_file(
-                path="index.html",
-                message=f"Initial site deployment for {city}",
-                content=new_content,
-                branch="main"
-            )
+            repo.create_file(path="index.html", message=f"Initial site deployment for {city}", content=new_content, branch="main")
         print("Committed updated index.html to the new repository.")
 
-        # 7. FINAL FIX: Enable GitHub Pages Deployment using the modern Service method
+        # 7. FINAL SOLUTION: Enable GitHub Pages using direct requests API call
         
-        # The new API endpoint structure requires getting the Pages service object.
-        # This replaces both 'enable_pages' and 'get_pages().update()'.
+        # The API URL for enabling Pages deployment
+        pages_api_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
         
-        # Ensure the Pages object exists (create it if not)
-        try:
-            pages = repo.get_pages()
-        except:
-            # If get_pages fails on a new repo, we manually trigger the creation/deployment
-            headers = {
-                'Accept': 'application/vnd.github.v3+json',
-                'Authorization': f'token {token}',
+        headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': f'token {token}',
+        }
+        data = {
+            'source': {
+                'branch': 'main',
+                'path': '/'
             }
-            data = {
-                'source': {
-                    'branch': 'main',
-                    'path': '/'
-                }
-            }
-            
-            # This is a highly stable method for creating/updating the Pages config
-            r = g.get_url(f'{repo.url}/pages', headers=headers, verb='POST', data=data)
-            
-            if r.status_code == 201 or r.status_code == 204:
-                print("Successfully configured GitHub Pages via API.")
+        }
+        
+        # Use POST to create Pages config (if it doesn't exist)
+        r = requests.post(pages_api_url, headers=headers, json=data)
+        
+        if r.status_code == 201:
+            print("Successfully configured GitHub Pages (New Site).")
+        elif r.status_code == 409:
+            # Conflict (409) means pages config already exists, so we update it
+            r = requests.put(pages_api_url, headers=headers, json=data)
+            if r.status_code == 204:
+                print("Successfully updated GitHub Pages configuration.")
             else:
-                 print(f"Warning: Pages API response was unexpected (Status: {r.status_code}).")
-        
-        # Now we can safely call get_pages to fetch the final URL
-        pages_info = repo.get_pages() 
+                print(f"Warning: Pages update failed (Status: {r.status_code}, Response: {r.text}).")
+        else:
+            print(f"Warning: Pages setup failed (Status: {r.status_code}, Response: {r.text}).")
+
+        # 8. Fetch and Display Final URL
+        pages_info_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
+        r = requests.get(pages_info_url, headers=headers)
+        pages_url = json.loads(r.text).get('html_url', 'URL not yet active or failed to retrieve.')
 
         print(f"\n--- SUCCESS ---")
         print(f"New repository created/updated: {repo.html_url}")
-        print(f"Live site URL (may take a minute to activate): {pages_info.html_url}")
+        print(f"Live site URL: {pages_url}")
         print(f"---------------")
 
     except Exception as e:
-        print(f"An error occurred during GitHub API operations: {e}")
+        print(f"A critical error occurred: {e}")
         raise
+
 if __name__ == "__main__":
     main()
