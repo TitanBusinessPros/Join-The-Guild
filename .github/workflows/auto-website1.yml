@@ -1,18 +1,17 @@
-name: Deploy New City Website
+name: Scheduled City Website Deployer
 
 on:
+  # Runs once every hour, on the hour (e.g., 1:00, 2:00, 3:00)
+  schedule:
+    - cron: '0 * * * *'
+  # Allows manual triggering for testing (without needing to enter a city)
   workflow_dispatch:
-    inputs:
-      city_name:
-        description: 'Enter City Name from replacement_word.txt (e.g., Edmond)'
-        required: true
-        default: 'Fayetteville'
 
 jobs:
-  create-and-deploy-repo:
+  create-and-deploy-all-repos:
     runs-on: ubuntu-latest
     
-    # Required permission settings for creating a new repository
+    # Required permission settings for creating new repositories
     permissions:
       contents: write
       pages: write
@@ -30,10 +29,12 @@ jobs:
         python-version: '3.x'
 
     - name: 3. Install Required Python Libraries
-      run: pip install PyGithub requests # Now installing requests
+      run: pip install PyGithub requests
       
-    - name: 4. Run Script to Create & Deploy New Repo
+    - name: 4. Run Script to Create & Deploy ALL Repos
       env:
-        CITY_INPUT: ${{ github.event.inputs.city_name }}
+        # Pass the secret token. No CITY_INPUT needed anymore.
         GH_TOKEN: ${{ secrets.websitemaker2 }}
+        # Set the required delay between repo creations (in seconds)
+        DEPLOY_DELAY: 180 
       run: python update_website.py
