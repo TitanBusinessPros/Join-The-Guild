@@ -8,6 +8,7 @@ from time import sleep
 # --- Configuration ---
 SOURCE_HTML_FILE = 'index.html'
 CITIES_FILE = 'replacement_word.txt'
+# This MUST EXACTLY MATCH the placeholder text in your source index.html
 SEARCH_TERM = 'Oklahoma City' 
 REPO_PREFIX = 'The-'
 REPO_SUFFIX = '-Software-Guild'
@@ -28,7 +29,7 @@ def get_thankyou_content(user_login, repo_name):
     # Base URL for GitHub Pages is typically: https://USERNAME.github.io/REPO_NAME/
     redirect_url = f"https://{user_login}.github.io/{repo_name}/index.html"
     
-    # Content of the Google verification file (empty body is standard)
+    # Content of the Google verification file (as a plain string)
     verification_content = 'google-site-verification: google51f4be66489794b6.html'
     
     # Content for the Thank You redirect page
@@ -108,8 +109,7 @@ def process_city_deployment(g, user, token, city):
             )
             sleep(5) 
 
-        # --- PHASE TWO ADDITION ---
-        # Get dynamically generated file content
+        # --- PHASE TWO ADDITION (New Files) ---
         verification_content, thankyou_html = get_thankyou_content(user.login, new_repo_name)
         
         # 6a. Commit Google Verification File
@@ -128,7 +128,7 @@ def process_city_deployment(g, user, token, city):
             repo.create_file(path=THANKYOU_FILE_NAME, message="Add thankyou redirect page", content=thankyou_html, branch="main")
         print(f"Committed {THANKYOU_FILE_NAME}.")
         
-        # 6c. Commit 'index.html' and '.nojekyll' (Remaining from Phase One)
+        # 6c. Commit 'index.html' and '.nojekyll' (Core Files)
 
         # Add/Update the .nojekyll file
         try:
@@ -182,8 +182,7 @@ def main():
     """Main execution function to loop through all cities."""
     
     token = os.environ.get('GH_TOKEN')
-    # Use float for more accurate sleep time
-    delay = float(os.environ.get('DEPLOY_DELAY', 180)) 
+    delay = float(os.environ.get('DEPLOY_DELAY', 180)) # Default 180 seconds (3 mins)
 
     if not token:
         raise EnvironmentError("Missing GH_TOKEN environment variable. Cannot proceed.")
@@ -214,7 +213,7 @@ def main():
         
         process_city_deployment(g, user, token, city)
     
-    print("\n\n*** ALL SCHEDULED DEPLOYMENTS COMPLETE ***")
+    print("\n\n*** ALL DEPLOYMENTS COMPLETE ***")
 
 
 if __name__ == "__main__":
