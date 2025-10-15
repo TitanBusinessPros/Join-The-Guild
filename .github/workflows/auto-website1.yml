@@ -29,12 +29,11 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: 3. Install PyGithub Library
-      run: pip install PyGithub
-
+    - name: 3. Install Required Python Libraries
+      run: pip install PyGithub requests # Now installing requests
+      
     - name: 4. Run Script to Create & Deploy New Repo
       env:
-        # Pass the manually entered city and the new secret token (websitemaker2)
         CITY_INPUT: ${{ github.event.inputs.city_name }}
         GH_TOKEN: ${{ secrets.websitemaker2 }}
       run: python update_website.py
