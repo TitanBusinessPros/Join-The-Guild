@@ -14,7 +14,6 @@ REPO_SUFFIX = '-Software-Guild'
 def read_file(filename):
     """Reads the content of a file."""
     if not os.path.exists(filename):
-        # We raise a simple exception here to stop the workflow gracefully
         raise FileNotFoundError(f"Required file not found: {filename}")
     with open(filename, 'r', encoding='utf-8') as f:
         return f.read()
@@ -27,7 +26,6 @@ def main():
     token = os.environ.get('GH_TOKEN')
 
     if not city_input or not token:
-        # Exit Code 1 guaranteed if these aren't set
         raise EnvironmentError("Missing CITY_INPUT or GH_TOKEN environment variables. Cannot proceed.")
 
     # 2. Read Cities and Validate Input
@@ -55,12 +53,13 @@ def main():
     new_site_title = f"{REPO_PREFIX.strip('-')} {city} {REPO_SUFFIX.strip('-')}"
     new_content = re.sub(r'<title>.*?</title>', f'<title>{new_site_title}</title>', new_content, flags=re.IGNORECASE)
     
-    # 5. Connect to GitHub and Create Repo
+    # 5. Connect to GitHub and Create/Get Repo
     try:
         g = Github(token)
         user = g.get_user()
         
         # Check if repo exists
+        repo_created = False
         try:
             repo = user.get_repo(new_repo_name)
             print(f"Repository {new_repo_name} already exists. Proceeding to update.")
@@ -78,7 +77,6 @@ def main():
             # Create the repository if it doesn't exist
             print(f"Repository {new_repo_name} does not exist. Creating new repository.")
             
-            # The API call for creation often fails if the token is bad.
             repo = user.create_repo(
                 name=new_repo_name,
                 description=f"GitHub Pages site for {city} Software Guild",
@@ -89,6 +87,7 @@ def main():
                 auto_init=True # Initialize with a README to ensure a main branch exists
             )
             print(f"Successfully created new repository: {new_repo_name}")
+            repo_created = True
             
             # Short wait for API consistency after creating the repo
             sleep(5) 
@@ -97,6 +96,7 @@ def main():
 
         # Add/Update the .nojekyll file (Crucial for Pages deployment)
         try:
+            # Check if .nojekyll exists to update it, otherwise create it
             contents = repo.get_contents(".nojekyll", ref="main")
             repo.update_file(
                 path=".nojekyll",
@@ -136,10 +136,14 @@ def main():
         print("Committed updated index.html to the new repository.")
 
         # 7. Enable GitHub Pages Deployment from the 'main' branch
-        repo.enable_pages(
+        
+        # CORRECTED FIX: This method replaces the obsolete 'enable_pages' call.
+        pages = repo.get_pages()
+        pages.update(
             source={"branch": "main", "path": "/"},
-            cname=None
         )
+        print("Enabled GitHub Pages deployment from 'main' branch.")
+
         
         pages_info = repo.get_pages()
         print(f"\n--- SUCCESS ---")
