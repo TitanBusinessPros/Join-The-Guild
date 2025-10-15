@@ -8,7 +8,7 @@ from time import sleep
 # --- Configuration ---
 SOURCE_HTML_FILE = 'index.html'
 CITIES_FILE = 'replacement_word.txt'
-# This MUST EXACTLY MATCH the placeholder text in your source index.html
+# Original placeholder text to be replaced in the HTML template
 SEARCH_TERM = 'Oklahoma City' 
 REPO_PREFIX = 'The-'
 REPO_SUFFIX = '-Software-Guild'
@@ -21,59 +21,32 @@ def read_file(filename):
     with open(filename, 'r', encoding='utf-8') as f:
         return f.read()
 
-def main():
-    """Main execution function."""
+def process_city_deployment(g, user, token, city):
+    """Handles the full creation, update, and deployment cycle for a single city."""
     
-    # 1. Get Environment Variables (City and Token)
-    city_input = os.environ.get('CITY_INPUT')
-    token = os.environ.get('GH_TOKEN')
-
-    if not city_input or not token:
-        raise EnvironmentError("Missing CITY_INPUT or GH_TOKEN environment variables. Cannot proceed.")
-
-    # 2. Read Cities and Validate Input
-    cities_data = read_file(CITIES_FILE)
-        
-    all_cities = [c.strip() for c in cities_data.splitlines() if c.strip()]
-    
-    if city_input not in all_cities:
-        raise ValueError(f"City '{city_input}' not found in {CITIES_FILE}.")
-
     # 3. Define New Repository Details
-    city = city_input
     repo_name_base = f"{city.replace(' ', '')}"
     new_repo_name = f"{REPO_PREFIX}{repo_name_base}{REPO_SUFFIX}"
+    print(f"\n--- STARTING DEPLOYMENT FOR: {city} ---")
     print(f"Targeting new repository: {new_repo_name}")
     
     # 4. Read and Modify HTML Content
     base_html_content = read_file(SOURCE_HTML_FILE)
     
-    # *** THIS IS THE CRITICAL REPLACEMENT LINE ***
-    # It attempts to replace all occurrences of SEARCH_TERM with the input city.
+    # Replace the city placeholder and the title
     new_content = base_html_content.replace(SEARCH_TERM, city)
-    
-    # Replace the title tag
     new_site_title = f"{REPO_PREFIX.strip('-')} {city} {REPO_SUFFIX.strip('-')}"
     new_content = re.sub(r'<title>.*?</title>', f'<title>{new_site_title}</title>', new_content, flags=re.IGNORECASE)
     
     # 5. Connect to GitHub and Create/Get Repo
+    repo = None
     try:
-        # Suppress the DeprecationWarning
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            g = Github(token)
-        user = g.get_user()
-        
         # Get or Create Repository
-        repo = None
-        repo_exists = False
         try:
             repo = user.get_repo(new_repo_name)
-            repo_exists = True
-            print(f"Repository {new_repo_name} already exists. Proceeding to update.")
+            print(f"Repository already exists. Proceeding to update.")
         except Exception:
-            print(f"Repository {new_repo_name} does not exist. Creating new repository.")
+            print(f"Repository does not exist. Creating new repository.")
             repo = user.create_repo(
                 name=new_repo_name,
                 description=f"GitHub Pages site for {city} Software Guild",
@@ -101,31 +74,22 @@ def main():
         print("Committed updated index.html to the new repository.")
 
         # 7. Enable GitHub Pages using direct requests API call
-        
         pages_api_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
-        
         headers = {
             'Accept': 'application/vnd.github.v3+json',
             'Authorization': f'token {token}',
         }
-        data = {
-            'source': {
-                'branch': 'main',
-                'path': '/'
-            }
-        }
+        data = {'source': {'branch': 'main', 'path': '/'}}
         
-        # Use POST to create Pages config (if it doesn't exist)
         r = requests.post(pages_api_url, headers=headers, json=data)
         
         if r.status_code == 201:
             print("Successfully configured GitHub Pages (New Site).")
         elif r.status_code == 409:
-            # Conflict (409) means pages config already exists, so we update it
             r = requests.put(pages_api_url, headers=headers, json=data)
             if r.status_code == 204:
                 print("Successfully updated GitHub Pages configuration.")
-        
+
         # 8. Fetch and Display Final URL
         pages_info_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
         r = requests.get(pages_info_url, headers=headers)
@@ -135,15 +99,54 @@ def main():
         except:
             pages_url = 'URL failed to retrieve, check repo settings manually.'
 
-
-        print(f"\n--- SUCCESS ---")
-        print(f"New repository created/updated: {repo.html_url}")
+        print(f"Final Repository URL: {repo.html_url}")
         print(f"Live site URL: {pages_url}")
-        print(f"---------------")
+        print(f"--- {city} DEPLOYMENT COMPLETE ---")
 
     except Exception as e:
-        print(f"A critical error occurred: {e}")
-        raise
+        print(f"A critical error occurred during {city} deployment: {e}")
+        # We don't raise here, so one city failure doesn't stop the others.
+        pass
+
+
+def main():
+    """Main execution function to loop through all cities."""
+    
+    token = os.environ.get('GH_TOKEN')
+    delay = int(os.environ.get('DEPLOY_DELAY', 180)) # Default 180 seconds (3 mins)
+
+    if not token:
+        raise EnvironmentError("Missing GH_TOKEN environment variable. Cannot proceed.")
+
+    # 1. Read All Cities
+    cities_data = read_file(CITIES_FILE)
+    all_cities = [c.strip() for c in cities_data.splitlines() if c.strip()]
+
+    if not all_cities:
+        print("Error: replacement_word.txt is empty. No deployments to run.")
+        return
+
+    # 2. Initialize GitHub connection (once)
+    try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            g = Github(token)
+        user = g.get_user()
+    except Exception as e:
+        raise ConnectionError(f"Failed to connect to GitHub API: {e}")
+
+    # 3. Iterate through all cities with a delay
+    for i, city in enumerate(all_cities):
+        if i > 0:
+            print(f"\n--- PAUSING for {delay} seconds (3 minutes) before next deployment... ---")
+            sleep(delay)
+        
+        # Deploy the current city
+        process_city_deployment(g, user, token, city)
+    
+    print("\n\n*** ALL SCHEDULED DEPLOYMENTS COMPLETE ***")
+
 
 if __name__ == "__main__":
     main()
