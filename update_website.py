@@ -8,10 +8,12 @@ from time import sleep
 # --- Configuration ---
 SOURCE_HTML_FILE = 'index.html'
 CITIES_FILE = 'replacement_word.txt'
-# Original placeholder text to be replaced in the HTML template
 SEARCH_TERM = 'Oklahoma City' 
 REPO_PREFIX = 'The-'
 REPO_SUFFIX = '-Software-Guild'
+# File paths and content for the new files
+VERIFICATION_FILE_NAME = 'google51f4be66489794b6.html'
+THANKYOU_FILE_NAME = 'thankyou.index'
 # ---------------------
 
 def read_file(filename):
@@ -20,6 +22,57 @@ def read_file(filename):
         raise FileNotFoundError(f"Required file not found: {filename}")
     with open(filename, 'r', encoding='utf-8') as f:
         return f.read()
+
+def get_thankyou_content(user_login, repo_name):
+    """Generates the thank you HTML with the correct, dynamic redirect URL."""
+    # Base URL for GitHub Pages is typically: https://USERNAME.github.io/REPO_NAME/
+    redirect_url = f"https://{user_login}.github.io/{repo_name}/index.html"
+    
+    # Content of the Google verification file (empty body is standard)
+    verification_content = 'google-site-verification: google51f4be66489794b6.html'
+    
+    # Content for the Thank You redirect page
+    thankyou_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thank You!</title>
+    <meta http-equiv="refresh" content="0; url={redirect_url}">
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            background: #1e293b;
+            color: #f8fafc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }}
+        h1 {{
+            color: #38bdf8;
+        }}
+        a {{
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: bold;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+    </style>
+</head>
+<body>
+    <div>
+        <h1>Thank you for contacting us!</h1>
+        <p>Redirecting you back to our homepage...</p>
+        <a href="index.html">Click here if you are not redirected</a>
+    </div>
+</body>
+</html>"""
+    return verification_content, thankyou_html
 
 def process_city_deployment(g, user, token, city):
     """Handles the full creation, update, and deployment cycle for a single city."""
@@ -55,8 +108,28 @@ def process_city_deployment(g, user, token, city):
             )
             sleep(5) 
 
-        # 6. Commit 'index.html' and '.nojekyll'
+        # --- PHASE TWO ADDITION ---
+        # Get dynamically generated file content
+        verification_content, thankyou_html = get_thankyou_content(user.login, new_repo_name)
         
+        # 6a. Commit Google Verification File
+        try:
+            contents = repo.get_contents(VERIFICATION_FILE_NAME, ref="main")
+            repo.update_file(path=VERIFICATION_FILE_NAME, message="Update Google verification file", content=verification_content, sha=contents.sha, branch="main")
+        except Exception:
+            repo.create_file(path=VERIFICATION_FILE_NAME, message="Add Google verification file for Console", content=verification_content, branch="main")
+        print(f"Committed {VERIFICATION_FILE_NAME}.")
+
+        # 6b. Commit Thank You Redirect File
+        try:
+            contents = repo.get_contents(THANKYOU_FILE_NAME, ref="main")
+            repo.update_file(path=THANKYOU_FILE_NAME, message="Update thankyou redirect file", content=thankyou_html, sha=contents.sha, branch="main")
+        except Exception:
+            repo.create_file(path=THANKYOU_FILE_NAME, message="Add thankyou redirect page", content=thankyou_html, branch="main")
+        print(f"Committed {THANKYOU_FILE_NAME}.")
+        
+        # 6c. Commit 'index.html' and '.nojekyll' (Remaining from Phase One)
+
         # Add/Update the .nojekyll file
         try:
             contents = repo.get_contents(".nojekyll", ref="main")
@@ -75,10 +148,7 @@ def process_city_deployment(g, user, token, city):
 
         # 7. Enable GitHub Pages using direct requests API call
         pages_api_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
-        headers = {
-            'Accept': 'application/vnd.github.v3+json',
-            'Authorization': f'token {token}',
-        }
+        headers = {'Accept': 'application/vnd.github.v3+json', 'Authorization': f'token {token}'}
         data = {'source': {'branch': 'main', 'path': '/'}}
         
         r = requests.post(pages_api_url, headers=headers, json=data)
@@ -105,15 +175,15 @@ def process_city_deployment(g, user, token, city):
 
     except Exception as e:
         print(f"A critical error occurred during {city} deployment: {e}")
-        # We don't raise here, so one city failure doesn't stop the others.
-        pass
+        pass # Allow other cities to proceed
 
 
 def main():
     """Main execution function to loop through all cities."""
     
     token = os.environ.get('GH_TOKEN')
-    delay = int(os.environ.get('DEPLOY_DELAY', 180)) # Default 180 seconds (3 mins)
+    # Use float for more accurate sleep time
+    delay = float(os.environ.get('DEPLOY_DELAY', 180)) 
 
     if not token:
         raise EnvironmentError("Missing GH_TOKEN environment variable. Cannot proceed.")
@@ -142,7 +212,6 @@ def main():
             print(f"\n--- PAUSING for {delay} seconds (3 minutes) before next deployment... ---")
             sleep(delay)
         
-        # Deploy the current city
         process_city_deployment(g, user, token, city)
     
     print("\n\n*** ALL SCHEDULED DEPLOYMENTS COMPLETE ***")
