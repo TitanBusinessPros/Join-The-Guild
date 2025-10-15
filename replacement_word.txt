@@ -1,5 +1,3 @@
-Washington
-Arizona
-Nevada
-Idaho
-Oklahoma
+Chicago
+Houston
+Phoenix
