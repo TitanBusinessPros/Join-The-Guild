@@ -1,10 +1,7 @@
-name: Scheduled City Website Deployer
+name: Manual City Website Deployer
 
 on:
-  # Runs once every hour, on the hour (e.g., 1:00, 2:00, 3:00)
-  schedule:
-    - cron: '0 * * * *'
-  # Allows manual triggering for testing (without needing to enter a city)
+  # Allows the workflow to be triggered manually from the GitHub UI
   workflow_dispatch:
 
 jobs:
@@ -33,7 +30,7 @@ jobs:
       
     - name: 4. Run Script to Create & Deploy ALL Repos
       env:
-        # Pass the secret token. No CITY_INPUT needed anymore.
+        # Pass the secret token.
         GH_TOKEN: ${{ secrets.websitemaker2 }}
         # Set the required delay between repo creations (in seconds)
         DEPLOY_DELAY: 180 
