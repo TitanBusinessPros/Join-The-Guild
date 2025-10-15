@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       city_name:
-        description: 'City Name (e.g., Edmond)'
+        description: 'Enter City Name from replacement_word.txt (e.g., Edmond)'
         required: true
         default: 'Fayetteville'
 
@@ -34,6 +34,7 @@ jobs:
 
     - name: 4. Run Script to Create & Deploy New Repo
       env:
+        # Pass the manually entered city and the new secret token (websitemaker2)
         CITY_INPUT: ${{ github.event.inputs.city_name }}
-        GH_TOKEN: ${{ secrets.WEBSITEMAKER1 }}
+        GH_TOKEN: ${{ secrets.websitemaker2 }}
       run: python update_website.py
