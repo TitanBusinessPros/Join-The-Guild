@@ -1,8 +1,6 @@
 import os
 import re
-# CORRECTED: InputRequired is not a top-level import. Removed it from here.
-from github import Github 
-# CORRECTED: We only need 'sleep' from 'time'
+from github import Github
 from time import sleep
 
 # --- Configuration ---
@@ -16,8 +14,8 @@ REPO_SUFFIX = '-Software-Guild'
 def read_file(filename):
     """Reads the content of a file."""
     if not os.path.exists(filename):
-        print(f"Error: Required file not found: {filename}")
-        return None
+        # We raise a simple exception here to stop the workflow gracefully
+        raise FileNotFoundError(f"Required file not found: {filename}")
     with open(filename, 'r', encoding='utf-8') as f:
         return f.read()
 
@@ -29,31 +27,26 @@ def main():
     token = os.environ.get('GH_TOKEN')
 
     if not city_input or not token:
-        print("Error: Missing CITY_INPUT or GH_TOKEN environment variables. Cannot proceed.")
-        return
+        # Exit Code 1 guaranteed if these aren't set
+        raise EnvironmentError("Missing CITY_INPUT or GH_TOKEN environment variables. Cannot proceed.")
 
     # 2. Read Cities and Validate Input
     cities_data = read_file(CITIES_FILE)
-    if cities_data is None:
-        return
         
     all_cities = [c.strip() for c in cities_data.splitlines() if c.strip()]
     
     # Check if the input city is in the text file
     if city_input not in all_cities:
-        print(f"Error: City '{city_input}' not found in {CITIES_FILE}. Valid cities are: {', '.join(all_cities)}")
-        return
+        raise ValueError(f"City '{city_input}' not found in {CITIES_FILE}. Valid cities are: {', '.join(all_cities)}")
 
     # 3. Define New Repository Details
-    city = city_input # Use the validated city name
+    city = city_input
     repo_name_base = f"{city.replace(' ', '')}"
     new_repo_name = f"{REPO_PREFIX}{repo_name_base}{REPO_SUFFIX}"
     print(f"Targeting new repository: {new_repo_name}")
     
     # 4. Read and Modify HTML Content
     base_html_content = read_file(SOURCE_HTML_FILE)
-    if base_html_content is None:
-        return
 
     # Replace the body content (city name)
     new_content = base_html_content.replace(SEARCH_TERM, city)
@@ -72,17 +65,20 @@ def main():
             repo = user.get_repo(new_repo_name)
             print(f"Repository {new_repo_name} already exists. Proceeding to update.")
             
-            # If repo exists, ensure main branch is updated/created
+            # Ensure main branch exists before committing
             try:
                 repo.get_branch("main")
             except Exception:
-                # If main branch doesn't exist (e.g., empty repo), create it
-                repo.create_git_ref(ref='refs/heads/main', sha=repo.get_commits()[0].sha)
-                print("Created 'main' branch.")
-
+                # Get the SHA of the initial commit to create 'main' branch reference
+                initial_sha = repo.get_commits()[0].sha
+                repo.create_git_ref(ref='refs/heads/main', sha=initial_sha)
+                print("Created 'main' branch reference.")
+            
         except Exception as e:
             # Create the repository if it doesn't exist
             print(f"Repository {new_repo_name} does not exist. Creating new repository.")
+            
+            # The API call for creation often fails if the token is bad.
             repo = user.create_repo(
                 name=new_repo_name,
                 description=f"GitHub Pages site for {city} Software Guild",
@@ -90,18 +86,17 @@ def main():
                 has_issues=False,
                 has_projects=False,
                 has_wiki=False,
-                auto_init=True # Initialize with a README to create the main branch
+                auto_init=True # Initialize with a README to ensure a main branch exists
             )
             print(f"Successfully created new repository: {new_repo_name}")
             
-            # GitHub Pages setup requires a short wait after creation
+            # Short wait for API consistency after creating the repo
             sleep(5) 
             
         # 6. Commit 'index.html' and '.nojekyll' to the new repo's main branch
 
-        # Add the .nojekyll file (Crucial for Pages deployment)
+        # Add/Update the .nojekyll file (Crucial for Pages deployment)
         try:
-            # Check if .nojekyll exists to update it, otherwise create it
             contents = repo.get_contents(".nojekyll", ref="main")
             repo.update_file(
                 path=".nojekyll",
@@ -111,7 +106,6 @@ def main():
                 branch="main"
             )
         except Exception:
-            # Create new file
             repo.create_file(
                 path=".nojekyll",
                 message="Add .nojekyll to enable direct HTML serving",
@@ -154,10 +148,8 @@ def main():
         print(f"---------------")
 
     except Exception as e:
-        # Catch all exceptions for better logging
-        print(f"A critical error occurred: {e}")
-        # Print the exception type for more detail
-        print(f"Exception Type: {type(e).__name__}")
+        # Re-raise the exception after printing details so the workflow fails properly
+        print(f"An error occurred during GitHub API operations: {e}")
         raise
 
 if __name__ == "__main__":
