@@ -1,6 +1,8 @@
 import os
 import re
-from github import Github, InputRequired
+# CORRECTED: InputRequired is not a top-level import. Removed it from here.
+from github import Github 
+# CORRECTED: We only need 'sleep' from 'time'
 from time import sleep
 
 # --- Configuration ---
@@ -151,12 +153,11 @@ def main():
         print(f"Live site URL (may take a minute to activate): {pages_info.html_url}")
         print(f"---------------")
 
-
-    except InputRequired as e:
-        print(f"API Error: A required input for GitHub API was missing. Check token scopes.")
-        raise
     except Exception as e:
+        # Catch all exceptions for better logging
         print(f"A critical error occurred: {e}")
+        # Print the exception type for more detail
+        print(f"Exception Type: {type(e).__name__}")
         raise
 
 if __name__ == "__main__":
