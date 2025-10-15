@@ -8,7 +8,7 @@ from time import sleep
 # --- Configuration ---
 SOURCE_HTML_FILE = 'index.html'
 CITIES_FILE = 'replacement_word.txt'
-# RESET TO THE ORIGINAL PLACEHOLDER:
+# This MUST EXACTLY MATCH the placeholder text in your source index.html
 SEARCH_TERM = 'Oklahoma City' 
 REPO_PREFIX = 'The-'
 REPO_SUFFIX = '-Software-Guild'
@@ -48,7 +48,8 @@ def main():
     # 4. Read and Modify HTML Content
     base_html_content = read_file(SOURCE_HTML_FILE)
     
-    # *** THIS IS THE CRITICAL LINE THAT USES THE RESTORED SEARCH_TERM ***
+    # *** THIS IS THE CRITICAL REPLACEMENT LINE ***
+    # It attempts to replace all occurrences of SEARCH_TERM with the input city.
     new_content = base_html_content.replace(SEARCH_TERM, city)
     
     # Replace the title tag
@@ -124,8 +125,7 @@ def main():
             r = requests.put(pages_api_url, headers=headers, json=data)
             if r.status_code == 204:
                 print("Successfully updated GitHub Pages configuration.")
-            # else: error warning (omitted for brevity)
-
+        
         # 8. Fetch and Display Final URL
         pages_info_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
         r = requests.get(pages_info_url, headers=headers)
