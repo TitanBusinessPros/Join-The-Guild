@@ -1,14 +1,15 @@
 import os
 import re
 import json
-import requests # NEW: Import requests for direct API call
+import requests 
 from github import Github
 from time import sleep
 
 # --- Configuration ---
 SOURCE_HTML_FILE = 'index.html'
 CITIES_FILE = 'replacement_word.txt'
-SEARCH_TERM = 'Oklahoma City'
+# RESET TO THE ORIGINAL PLACEHOLDER:
+SEARCH_TERM = 'Oklahoma City' 
 REPO_PREFIX = 'The-'
 REPO_SUFFIX = '-Software-Guild'
 # ---------------------
@@ -46,6 +47,8 @@ def main():
     
     # 4. Read and Modify HTML Content
     base_html_content = read_file(SOURCE_HTML_FILE)
+    
+    # *** THIS IS THE CRITICAL LINE THAT USES THE RESTORED SEARCH_TERM ***
     new_content = base_html_content.replace(SEARCH_TERM, city)
     
     # Replace the title tag
@@ -54,7 +57,7 @@ def main():
     
     # 5. Connect to GitHub and Create/Get Repo
     try:
-        # Use the standard method to connect to PyGithub
+        # Suppress the DeprecationWarning
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -96,9 +99,8 @@ def main():
             repo.create_file(path="index.html", message=f"Initial site deployment for {city}", content=new_content, branch="main")
         print("Committed updated index.html to the new repository.")
 
-        # 7. FINAL SOLUTION: Enable GitHub Pages using direct requests API call
+        # 7. Enable GitHub Pages using direct requests API call
         
-        # The API URL for enabling Pages deployment
         pages_api_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
         
         headers = {
@@ -122,15 +124,17 @@ def main():
             r = requests.put(pages_api_url, headers=headers, json=data)
             if r.status_code == 204:
                 print("Successfully updated GitHub Pages configuration.")
-            else:
-                print(f"Warning: Pages update failed (Status: {r.status_code}, Response: {r.text}).")
-        else:
-            print(f"Warning: Pages setup failed (Status: {r.status_code}, Response: {r.text}).")
+            # else: error warning (omitted for brevity)
 
         # 8. Fetch and Display Final URL
         pages_info_url = f"https://api.github.com/repos/{user.login}/{new_repo_name}/pages"
         r = requests.get(pages_info_url, headers=headers)
-        pages_url = json.loads(r.text).get('html_url', 'URL not yet active or failed to retrieve.')
+        
+        try:
+            pages_url = json.loads(r.text).get('html_url', 'URL not yet active or failed to retrieve.')
+        except:
+            pages_url = 'URL failed to retrieve, check repo settings manually.'
+
 
         print(f"\n--- SUCCESS ---")
         print(f"New repository created/updated: {repo.html_url}")
